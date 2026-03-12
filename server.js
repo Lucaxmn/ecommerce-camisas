@@ -1,57 +1,109 @@
-require("dotenv").config()
-require("./db")
+const express = require("express");
+const cors = require("cors");
+const db = require("./db");
 
-const express = require("express")
-const cors = require("cors")
-const db = require("./db")
+const app = express();
+const PORT = 3000;
 
-const app = express()
+app.use(cors());
+app.use(express.json());
 
-app.use(cors())
-app.use(express.json())
+app.get("/", (req, res) => {
+  res.send("API do e-commerce de produtos para academia funcionando!");
+});
 
-app.get("/health", (req, res) => {
-    res.json({ status: "ok" })
-})
+app.get("/produtos", (req, res) => {
+  db.all("SELECT * FROM produtos", [], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ erro: err.message });
+    }
+    res.json(rows);
+  });
+});
 
-app.post("/products", async (req, res) => {
+app.get("/produtos/:id", (req, res) => {
+  const { id } = req.params;
 
-    const { name, brand, category, price, image, description, attributes } = req.body
+  db.get("SELECT * FROM produtos WHERE id = ?", [id], (err, row) => {
+    if (err) {
+      return res.status(500).json({ erro: err.message });
+    }
 
-    const result = await db.run(
-        "INSERT INTO products (name, brand, category, price, image, description, attributes) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [name, brand, category, price, image, description, JSON.stringify(attributes)]
-    )
+    if (!row) {
+      return res.status(404).json({ erro: "Produto não encontrado." });
+    }
 
-    res.json({
-        id: result.lastID
-    })
+    res.json(row);
+  });
+});
 
-})
+app.post("/produtos", (req, res) => {
+  const { nome, categoria, descricao, preco, estoque, imagem } = req.body;
 
-app.get("/products", async (req, res) => {
+  if (!nome || !categoria || !descricao || preco == null || estoque == null || !imagem) {
+    return res.status(400).json({ erro: "Preencha todos os campos." });
+  }
 
-    const products = await db.all(
-        "SELECT * FROM products"
-    )
+  const sql = `
+    INSERT INTO produtos (nome, categoria, descricao, preco, estoque, imagem)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `;
 
-    res.json(products)
+  db.run(sql, [nome, categoria, descricao, preco, estoque, imagem], function (err) {
+    if (err) {
+      return res.status(500).json({ erro: err.message });
+    }
 
-})
+    res.status(201).json({
+      mensagem: "Produto cadastrado com sucesso.",
+      id: this.lastID
+    });
+  });
+});
 
-app.get("/product/:id", async (req, res) => {
+app.put("/produtos/:id", (req, res) => {
+  const { id } = req.params;
+  const { nome, categoria, descricao, preco, estoque, imagem } = req.body;
 
-    const product = await db.get(
-        "SELECT * FROM products WHERE id = ?",
-        [req.params.id]
-    )
+  if (!nome || !categoria || !descricao || preco == null || estoque == null || !imagem) {
+    return res.status(400).json({ erro: "Preencha todos os campos." });
+  }
 
-    res.json(product)
+  const sql = `
+    UPDATE produtos
+    SET nome = ?, categoria = ?, descricao = ?, preco = ?, estoque = ?, imagem = ?
+    WHERE id = ?
+  `;
 
-})
+  db.run(sql, [nome, categoria, descricao, preco, estoque, imagem, id], function (err) {
+    if (err) {
+      return res.status(500).json({ erro: err.message });
+    }
 
-const PORT = process.env.PORT || 8080
+    if (this.changes === 0) {
+      return res.status(404).json({ erro: "Produto não encontrado." });
+    }
+
+    res.json({ mensagem: "Produto atualizado com sucesso." });
+  });
+});
+
+app.delete("/produtos/:id", (req, res) => {
+  const { id } = req.params;
+
+  db.run("DELETE FROM produtos WHERE id = ?", [id], function (err) {
+    if (err) {
+      return res.status(500).json({ erro: err.message });
+    }
+
+    if (this.changes === 0) {
+      return res.status(404).json({ erro: "Produto não encontrado." });
+    }
+
+    res.json({ mensagem: "Produto removido com sucesso." });
+  });
+});
 
 app.listen(PORT, () => {
-    console.log("Servidor rodando em http://localhost:" + PORT)
-})
+  console.log(`Servidor rodando em http://localhost:${PORT}`);
+});
